@@ -6,6 +6,7 @@
             "type": "debugpy",
             "request": "launch",
             "module": "uvicorn",
+            "cwd": "${workspaceFolder}/src",
             "args": [
                 "api:app",
                 "--host",
@@ -20,13 +21,15 @@
             "name": "Run All Scrapers (main.py)",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/main.py",
+            "cwd": "${workspaceFolder}/src",
+            "program": "${workspaceFolder}/src/main.py",
             "console": "integratedTerminal"
         },
         {
             "name": "Python: Current File",
             "type": "debugpy",
             "request": "launch",
+            "cwd": "${fileDirname}",
             "program": "${file}",
             "console": "integratedTerminal"
         },
@@ -34,28 +37,32 @@
             "name": "Scrape Mostaql",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/mostaql_scraper.py",
+            "cwd": "${workspaceFolder}/src",
+            "program": "${workspaceFolder}/src/mostaql_scraper.py",
             "console": "integratedTerminal"
         },
         {
             "name": "Scrape Khamsat",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/Khamsat_scraper.py",
+            "cwd": "${workspaceFolder}/src",
+            "program": "${workspaceFolder}/src/Khamsat_scraper.py",
             "console": "integratedTerminal"
         },
         {
             "name": "Scrape Nafezly",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/nafezly_scraper.py",
+            "cwd": "${workspaceFolder}/src",
+            "program": "${workspaceFolder}/src/nafezly_scraper.py",
             "console": "integratedTerminal"
         },
         {
             "name": "Scrape Freelancer",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/Freelancer_scraper.py",
+            "cwd": "${workspaceFolder}/src",
+            "program": "${workspaceFolder}/src/Freelancer_scraper.py",
             "console": "integratedTerminal"
         }
     ]

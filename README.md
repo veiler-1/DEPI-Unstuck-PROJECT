@@ -1,25 +1,39 @@
 # Unstuck - Freelance Platforms Scraper & Unified Database
 
-A high-performance Python data extraction pipeline that collects, normalizes, and stores freelance listings from Mostaql, Khamsat, Nafezly, and Freelancer.com into an SQLite database. It provides a FastAPI backend to query stored records and integrate with automation tools like n8n.
+A Python-based data extraction pipeline that collects, normalizes, and stores freelance listings from Mostaql, Khamsat, Nafezly, and Freelancer.com into an SQLite database. It provides a FastAPI backend to query stored records and integrate with automation tools like n8n.
 
-## Architecture
+## Repository Structure
 
-- **Scrapers**: Individual modules using `requests` and `BeautifulSoup` to scrape each platform.
-- **Concurrency**: `ThreadPoolExecutor` handles parallel execution across platforms in `main.py`.
-- **Database**: SQLite database (`freelance_projects.db`) with normalized schema and automatic deduplication based on unique URL hashes.
-- **API**: FastAPI service (`api.py`) exposing endpoints for scraping, querying jobs, and market analytics.
-- **Workflow**: Automated scheduling and data transformation via n8n (`n8n_workflow.json`).
-
-## Database Schema
-
-- `platforms`: Platform metadata (id, name, base_url).
-- `projects`: Main listing data (title, url, price, duration, published_date, description, project_uid).
-- `project_skills`: Normalized tags and required skills linked by `project_id`.
-- `ai_analysis`: Optional structured evaluation and proposal draft.
+```
+.
+├── docs/                                  # Project documentation, proposal, and deliverables
+│   ├── 01_Project_Planning_and_Management.pdf
+│   ├── Requirements_Gathering.pdf
+│   ├── UNSTUCK_Literature_Review_Competitive_Analysis.pdf
+│   └── final proposal templet.docx
+│
+├── src/                                   # Source code and database files
+│   ├── main.py                            # Parallel scraper runner
+│   ├── api.py                             # FastAPI REST endpoints
+│   ├── database.py                        # SQLite schema and query manager
+│   ├── freelance_projects.db              # SQLite relational database
+│   ├── Freelancer_scraper.py              # Freelancer.com scraper
+│   ├── Khamsat_scraper.py                 # Khamsat requests scraper
+│   ├── mostaql_scraper.py                 # Mostaql projects scraper
+│   ├── nafezly_scraper.py                 # Nafezly projects scraper
+│   ├── gemini_ai.py                       # Gemini AI enrichment module
+│   ├── n8n_workflow.json                  # UNSTUCK automated n8n workflow
+│   ├── all_projects.json                  # Consolidated project dump
+│   ├── requirements.txt                   # Python dependencies
+│   └── .env.example                       # Environment configuration template
+│
+└── README.md
+```
 
 ## Setup
 
 ```bash
+cd src
 pip install -r requirements.txt
 ```
 
@@ -32,8 +46,8 @@ cp .env.example .env
 
 ### Run Scraper Directly
 
-Scrape one page per platform and persist to database:
 ```bash
+cd src
 python main.py
 ```
 
@@ -45,18 +59,13 @@ Options:
 ### Start the API Server
 
 ```bash
+cd src
 python api.py
 ```
-Default URL: `http://localhost:8000`  
-Interactive documentation: `http://localhost:8000/docs`
-
-### API Endpoints
-
-- `POST /scrape`: Run scrapers and sync results to database.
-- `GET /jobs`: Query stored jobs with filtering (`platform`, `keyword`, `limit`).
-- `GET /jobs/analytics`: Aggregated skill counts and platform distribution.
-- `GET /api/status`: Service and database health.
+- API Docs: `http://localhost:8000/docs`
+- Query Jobs: `http://localhost:8000/jobs?limit=500`
+- Market Analytics: `http://localhost:8000/jobs/analytics`
 
 ### n8n Integration
 
-Import `n8n_workflow.json` into n8n to execute scheduled scraping and ingest jobs into your pipeline.
+Import `src/n8n_workflow.json` into n8n to execute scheduled scraping and ingest jobs into your pipeline.
