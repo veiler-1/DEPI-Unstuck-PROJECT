@@ -1,0 +1,62 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Start FastAPI Server (api.py)",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "api:app",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "8000",
+                "--reload"
+            ],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Run All Scrapers (main.py)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Python: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Scrape Mostaql",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/mostaql_scraper.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Scrape Khamsat",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/Khamsat_scraper.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Scrape Nafezly",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/nafezly_scraper.py",
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Scrape Freelancer",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/Freelancer_scraper.py",
+            "console": "integratedTerminal"
+        }
+    ]
+}

@@ -1,0 +1,180 @@
+{
+  "name": "UNSTUCK - Unified Freelance Jobs & Database",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -304,
+        0
+      ],
+      "id": "e5959a66-442f-4d0e-98dd-22759051f5a6",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "53e71da3-3f74-4ada-b03f-66f412b5c153",
+              "name": "baseUrl",
+              "value": "http://host.docker.internal:8000",
+              "type": "string"
+            },
+            {
+              "id": "b1a2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+              "name": "scrapeUrl",
+              "value": "http://host.docker.internal:8000/scrape",
+              "type": "string"
+            },
+            {
+              "id": "c2d3e4f5-a6b7-8c9d-0e1f-2a3b4c5d6e7f",
+              "name": "jobsUrl",
+              "value": "http://host.docker.internal:8000/jobs?limit=500",
+              "type": "string"
+            },
+            {
+              "id": "d3e4f5a6-b7c8-9d0e-1f2a-3b4c5d6e7f8a",
+              "name": "analyticsUrl",
+              "value": "http://host.docker.internal:8000/jobs/analytics",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        -96,
+        0
+      ],
+      "id": "5de98b33-b95e-4d97-8541-a450a8ee4793",
+      "name": "API Configuration"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.scrapeUrl }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        128,
+        0
+      ],
+      "id": "df987245-c7bd-413c-bdff-0f498ceab313",
+      "name": "1. Run Scrapers & Sync DB"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('API Configuration').item.json.jobsUrl }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        368,
+        -96
+      ],
+      "id": "a1b2c3d4-89ab-cdef-0123-456789abcdef",
+      "name": "2. Fetch All Unified Jobs"
+    },
+    {
+      "parameters": {
+        "jsCode": "// استخراج وتحويل الوظائف إلى عناصر مستقلة في n8n\nconst rawData = $input.first().json;\nconst jobsList = rawData.jobs || [];\n\nreturn jobsList.map(job => ({\n  json: {\n    id: job.id,\n    platform: job.platform,\n    title: job.title,\n    url: job.url,\n    price: job.price || '',\n    duration: job.duration || '',\n    publish_date: job.publish_date || '',\n    skills: Array.isArray(job.skills) ? job.skills.join(', ') : (job.skills || ''),\n    skills_list: job.skills || [],\n    proposals_count: job.proposals_count || '',\n    status: job.status || '',\n    client_name: job.client_name || '',\n    brief: job.brief || '',\n    description: job.description || '',\n    scraped_at: job.scraped_at || new Date().toISOString()\n  }\n}));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        -96
+      ],
+      "id": "b2c3d4e5-90ab-cdef-1234-56789abcdef0",
+      "name": "3. Normalize Jobs For Analysis"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('API Configuration').item.json.analyticsUrl }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        368,
+        128
+      ],
+      "id": "c3d4e5f6-01bc-def0-2345-6789abcdef01",
+      "name": "4. Get Market Analytics Summary"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "API Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "API Configuration": {
+      "main": [
+        [
+          {
+            "node": "1. Run Scrapers & Sync DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1. Run Scrapers & Sync DB": {
+      "main": [
+        [
+          {
+            "node": "2. Fetch All Unified Jobs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "4. Get Market Analytics Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "2. Fetch All Unified Jobs": {
+      "main": [
+        [
+          {
+            "node": "3. Normalize Jobs For Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "cae7c6da-6162-42fa-8330-0b164a02fc62",
+  "meta": {
+    "instanceId": "95b2514c5d5bc47ad0db916a8899bb31bb7d039c67cd44938e94f09b2b7adabd"
+  },
+  "nodeGroups": [],
+  "id": "Jk2GbG4tALY6Rxen",
+  "tags": []
+}
