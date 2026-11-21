@@ -1,0 +1,468 @@
+{
+  "name": "Unstuck – CV Upload, Supabase Skills Extraction & Instant Job Match Notification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "cv-upload",
+        "options": {
+          "rawBody": true
+        },
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-cv-upload",
+      "name": "Webhook Trigger (CV Upload)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [220, -200],
+      "webhookId": "cv-upload-webhook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/cv/upload",
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "extract-cv-skills",
+      "name": "Extract Skills from CV (AI & Parser)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [480, -200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare user payload with extracted skills and ranking metrics for Supabase\nconst cvResult = $input.first().json;\n\n// Normalize candidate data\nconst skills = cvResult.skills || [];\nconst name = cvResult.name || cvResult.candidate_name || 'Freelancer';\nconst email = cvResult.email || cvResult.candidate_email || 'user@unstuck.app';\nconst title = cvResult.professional_title || 'Full-Stack Developer';\nconst exp = cvResult.experience_level || 'Mid-Level';\nconst summary = cvResult.summary || '';\nconst highMatchJobs = cvResult.high_score_jobs || [];\nconst metrics = cvResult.metrics || {};\n\nreturn [{\n  json: {\n    user: {\n      name: name,\n      email: email,\n      title: title,\n      experience_level: exp,\n      summary: summary,\n      skills: skills,\n      total_skills: skills.length,\n      alertThreshold: 75,\n      rank_score: metrics.total_score || (skills.length * 20),\n      badge: metrics.badge || '🌱 Aspiring Talent',\n      updatedAt: new Date().toISOString()\n    },\n    jobs: highMatchJobs,\n    totalMatches: cvResult.matched_jobs_count || highMatchJobs.length,\n    highScoreMatches: highMatchJobs.length,\n    filename: cvResult.filename || 'cv.pdf'\n  }\n}];"
+      },
+      "id": "save-skills-profile",
+      "name": "Format Profile for Supabase",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [740, -200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/profile/update-skills",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"email\": {{ JSON.stringify($json.user.email) }},\n  \"full_name\": {{ JSON.stringify($json.user.name) }},\n  \"title\": {{ JSON.stringify($json.user.title) }},\n  \"experience_level\": {{ JSON.stringify($json.user.experience_level) }},\n  \"summary\": {{ JSON.stringify($json.user.summary) }},\n  \"skills\": {{ JSON.stringify($json.user.skills) }}\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "sync-profile-supabase",
+      "name": "Sync Profile & Rank to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1000, -200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare matched jobs data and rank info for notification & webhook response\nconst syncRes = $input.first().json;\nconst prevData = $('Format Profile for Supabase').first().json;\n\nconst user = prevData.user || {};\nconst rankInfo = syncRes.rank_info || {};\nconst jobs = prevData.jobs || [];\n\n// Update user with live rank position\nuser.rank = rankInfo.rank || 1;\nuser.total_users = rankInfo.total_users || 50;\nuser.rank_score = rankInfo.total_score || user.rank_score;\nuser.badge = rankInfo.badge || user.badge;\n\nreturn [{\n  json: {\n    user: user,\n    jobs: jobs,\n    threshold: user.alertThreshold || 75,\n    highScoreMatches: jobs.length,\n    totalMatches: prevData.totalMatches || jobs.length\n  }\n}];"
+      },
+      "id": "prepare-notification-payload",
+      "name": "Prepare Notification & Rank",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1260, -200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-matches-exist",
+              "leftValue": "={{ $json.highScoreMatches }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-matches-found",
+      "name": "Check if Matches Found",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1560, -200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format a high-conversion, bilingual responsive HTML email\nconst data = $input.first().json;\nconst user = data.user || {};\nconst jobs = data.jobs || [];\nconst userName = user.name || 'مبدع Unstuck';\nconst userEmail = user.email || '';\nconst threshold = data.threshold || 75;\nconst userRank = user.rank ? `#${user.rank}` : 'Top Pro';\nconst userBadge = user.badge || '⚡ Senior Pro';\n\nconst jobCards = jobs.slice(0, 8).map((job, i) => {\n  const title = job.title || 'Untitled Opportunity';\n  const platform = job.platform || 'منصة عمل حر';\n  const score = job.match_score || job.score || 85;\n  const matchedSkills = (job.matched_skills || []).slice(0, 5);\n  const url = job.url || '#';\n  const price = job.price || '$50 - $200';\n  const duration = job.duration || 'أسبوع';\n  const brief = (job.brief || '').substring(0, 160) + '...';\n\n  const scoreColor = score >= 90 ? '#10b981' : score >= 80 ? '#3b82f6' : '#f59e0b';\n  const scoreBg = score >= 90 ? '#ecfdf5' : score >= 80 ? '#eff6ff' : '#fef3c7';\n\n  return `\n    <div style=\"background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);\">\n      <div style=\"display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;\">\n        <div style=\"flex: 1;\">\n          <span style=\"display: inline-block; background: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; margin-bottom: 6px;\">📌 ${platform}</span>\n          <h3 style=\"margin: 0 0 6px 0; font-size: 16px; color: #0f172a; line-height: 1.4;\">${title}</h3>\n        </div>\n        <div style=\"background: ${scoreBg}; color: ${scoreColor}; border: 1px solid ${scoreColor}; padding: 6px 14px; border-radius: 999px; font-weight: 800; font-size: 15px; margin-left: 12px; white-space: nowrap;\">\n          ${score}% تطابق\n        </div>\n      </div>\n      <p style=\"color: #64748b; font-size: 13.5px; line-height: 1.5; margin: 0 0 14px 0;\">${brief}</p>\n      <div style=\"display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px;\">\n        ${matchedSkills.map(s => `<span style=\"background: #fdf2f8; color: #be123c; border: 1px solid #fbcfe8; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 600;\">✓ ${s}</span>`).join(' ')}\n      </div>\n      <div style=\"display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #f1f5f9; padding-top: 12px;\">\n        <div style=\"font-size: 13px; color: #334155;\">💰 <strong>${price}</strong> &nbsp;•&nbsp; ⏱️ ${duration}</div>\n        <a href=\"${url}\" target=\"_blank\" style=\"background: #be123c; color: #ffffff; text-decoration: none; padding: 8px 18px; border-radius: 8px; font-size: 13px; font-weight: 700; display: inline-block;\">عرض المشروع والتقديم ←</a>\n      </div>\n    </div>`;\n}).join('');\n\nconst html = `\n<!DOCTYPE html>\n<html dir=\"rtl\" lang=\"ar\">\n<head><meta charset=\"utf-8\"></head>\n<body style=\"margin: 0; padding: 0; background: #f8fafc; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; direction: rtl;\">\n  <div style=\"max-width: 680px; margin: 24px auto; background: #ffffff; border-radius: 16px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 10px 30px rgba(0,0,0,0.06);\">\n    <!-- Header -->\n    <div style=\"background: linear-gradient(135deg, #be123c 0%, #881337 100%); padding: 32px 24px; text-align: center; color: #ffffff;\">\n      <div style=\"font-size: 32px; font-weight: 900; letter-spacing: -0.5px;\">🚀 UNSTUCK</div>\n      <div style=\"font-size: 14px; opacity: 0.9; margin-top: 6px;\">رادار الوظائف الذكي والربط التلقائي عبر الـ CV</div>\n    </div>\n    <!-- Banner -->\n    <div style=\"background: #fff1f2; border-bottom: 1px solid #ffe4e6; padding: 16px 24px; display: flex; justify-content: space-between; align-items: center;\">\n      <div>\n        <span style=\"font-size: 14px; color: #9f1239; font-weight: 700;\">مرحباً يا ${userName}! 👋</span>\n        <div style=\"font-size: 12px; color: #e11d48; margin-top: 2px;\">تم استخراج مهاراتك من الـ CV وتحديث رادارك الشخصي بنجاح.</div>\n      </div>\n      <div style=\"text-align: left; background: #ffffff; padding: 6px 14px; border-radius: 8px; border: 1px solid #fecdd3;\">\n        <div style=\"font-size: 11px; color: #9f1239;\">ترتيبك في المنصة</div>\n        <div style=\"font-size: 15px; font-weight: 900; color: #be123c;\">${userRank} <span style=\"font-size: 12px;\">(${userBadge})</span></div>\n      </div>\n    </div>\n    <!-- Content -->\n    <div style=\"padding: 24px;\">\n      <h2 style=\"margin: 0 0 8px 0; font-size: 18px; color: #0f172a;\">🎯 وجدنا لك ${jobs.length} وظيفة تتطابق بدقة مع مهاراتك!</h2>\n      <p style=\"color: #64748b; font-size: 13.5px; margin: 0 0 20px 0;\">المشاريع التالية تجاوزت حاجز التطابق المحدد لملفك (${threshold}%):</p>\n      ${jobCards}\n    </div>\n    <!-- Footer -->\n    <div style=\"background: #f8fafc; padding: 20px 24px; text-align: center; border-top: 1px solid #e2e8f0;\">\n      <p style=\"margin: 0; font-size: 12.5px; color: #64748b;\">نظام Unstuck المستقل للأتمتة والربط الذكي بالمهام الحرة</p>\n      <p style=\"margin: 6px 0 0 0; font-size: 11px; color: #94a3b8;\">تصلك هذه الرسالة بناءً على إعدادات التنبيه التلقائي في ملفك الشخصي.</p>\n    </div>\n  </div>\n</body>\n</html>`;\n\nreturn [{\n  json: {\n    to: userEmail,\n    subject: `🚀 Unstuck: جالك ${jobs.length} وظيفة متوافقة تماماً مع الـ CV والمهارات الخاصة بك!`,\n    html: html,\n    userName: userName,\n    jobsCount: jobs.length,\n    user: user,\n    jobs: jobs\n  }\n}];"
+      },
+      "id": "format-email",
+      "name": "Format Email Notification (Arabic)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1820, -320]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/notify/email",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"to_email\": {{ JSON.stringify($json.to) }},\n  \"subject\": {{ JSON.stringify($json.subject) }},\n  \"html_content\": {{ JSON.stringify($json.html) }}\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "send-email",
+      "name": "Send Email Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [2080, -320]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({\n  success: true,\n  message: 'CV processed successfully. Skills saved to Supabase profile and matched jobs radar dispatched.',\n  user: $('Prepare Notification & Rank').first().json.user,\n  matches_found: $('Prepare Notification & Rank').first().json.highScoreMatches,\n  total_scraped_matches: $('Prepare Notification & Rank').first().json.totalMatches,\n  top_jobs: $('Prepare Notification & Rank').first().json.jobs.slice(0, 5),\n  email_notified: $('Prepare Notification & Rank').first().json.highScoreMatches > 0\n}) }}",
+        "options": {}
+      },
+      "id": "respond-cv-webhook",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2340, -200]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger (كل ساعة)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [220, 480]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/scrape?wait=true",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"platforms\": [\"all\"],\n  \"wait\": true\n}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "trigger-scrape-api",
+      "name": "Trigger Scrape & Upsert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [480, 380]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "http://host.docker.internal:8000/api/leaderboard?limit=100",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-supabase-users",
+      "name": "Fetch All Users from Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [740, 380]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fan out users from Supabase leaderboard response\nconst resp = $input.first().json;\nconst users = resp.leaderboard || [];\nreturn users.map(u => ({ json: u }));"
+      },
+      "id": "split-users",
+      "name": "Split Users Stream",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [950, 380]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/match",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ user_skills: $json.skills || [], platform: 'all', limit: 30 }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "match-jobs-per-user",
+      "name": "Match Jobs per User",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1160, 380]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filter high score jobs for each user\nconst matchResponse = $input.first().json;\nconst jobs = matchResponse.jobs || matchResponse.matches || [];\n\nlet user;\ntry {\n  user = $('Split Users Stream').first().json;\n} catch (e) {\n  user = { name: 'User', email: '', skills: [], total_score: 100, rank: 1 };\n}\n\nconst threshold = 75;\nconst highScoreJobs = jobs.filter(job => {\n  const score = job.match_score || job.score || 0;\n  return score >= threshold;\n});\n\nreturn [{\n  json: {\n    user: user,\n    threshold: threshold,\n    totalMatches: jobs.length,\n    highScoreMatches: highScoreJobs.length,\n    jobs: highScoreJobs\n  }\n}];"
+      },
+      "id": "filter-high-score-scrape",
+      "name": "Filter High Score Matches (Scrape)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1380, 380]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-matches-exist-scrape",
+              "leftValue": "={{ $json.highScoreMatches }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-matches-found-scrape",
+      "name": "Check Matches Found (Scrape)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1620, 380]
+    }
+  ],
+  "connections": {
+    "Webhook Trigger (CV Upload)": {
+      "main": [
+        [
+          {
+            "node": "Extract Skills from CV (AI & Parser)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Skills from CV (AI & Parser)": {
+      "main": [
+        [
+          {
+            "node": "Format Profile for Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Profile for Supabase": {
+      "main": [
+        [
+          {
+            "node": "Sync Profile & Rank to Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Profile & Rank to Supabase": {
+      "main": [
+        [
+          {
+            "node": "Prepare Notification & Rank",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Notification & Rank": {
+      "main": [
+        [
+          {
+            "node": "Check if Matches Found",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check if Matches Found": {
+      "main": [
+        [
+          {
+            "node": "Format Email Notification (Arabic)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Email Notification (Arabic)": {
+      "main": [
+        [
+          {
+            "node": "Send Email Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Notification": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger (كل ساعة)": {
+      "main": [
+        [
+          {
+            "node": "Trigger Scrape & Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Trigger Scrape & Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Scrape & Upsert": {
+      "main": [
+        [
+          {
+            "node": "Fetch All Users from Supabase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch All Users from Supabase": {
+      "main": [
+        [
+          {
+            "node": "Split Users Stream",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Users Stream": {
+      "main": [
+        [
+          {
+            "node": "Match Jobs per User",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Jobs per User": {
+      "main": [
+        [
+          {
+            "node": "Filter High Score Matches (Scrape)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter High Score Matches (Scrape)": {
+      "main": [
+        [
+          {
+            "node": "Check Matches Found (Scrape)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Matches Found (Scrape)": {
+      "main": [
+        [
+          {
+            "node": "Format Email Notification (Arabic)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "tags": [
+    {
+      "name": "Unstuck",
+      "id": "unstuck-tag"
+    },
+    {
+      "name": "Production",
+      "id": "production-tag"
+    }
+  ]
+}

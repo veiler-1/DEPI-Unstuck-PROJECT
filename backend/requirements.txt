@@ -1,0 +1,13 @@
+scrapy>=2.11.0
+brotli>=1.1.0
+itemadapter>=0.8.0
+fastapi>=0.100.0
+uvicorn>=0.20.0
+python-multipart>=0.0.12
+psycopg2-binary>=2.9.9
+python-dotenv>=1.0.0
+bcrypt>=4.0.0
+pypdf>=4.0.0
+pdfplumber>=0.10.0
+python-docx>=1.0.0
+supabase>=2.0.0
